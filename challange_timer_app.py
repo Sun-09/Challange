@@ -2,11 +2,14 @@ import streamlit as st
 import json
 import os
 from datetime import datetime
-import time
 
+# Constants
 DATA_FILE = "challenge_data.json"
+DING_FILE = "ding.mp3"
+VICTORY_FILE = "victory.mp3"
+BACKGROUND_MUSIC_FILE = "background.mp3"
 
-# Utility functions
+# Data handling
 def load_data():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, "r") as f:
@@ -21,6 +24,7 @@ def reset_challenge():
     if os.path.exists(DATA_FILE):
         os.remove(DATA_FILE)
 
+# Emoji messages
 def get_emoji(percent):
     if percent < 25:
         return "🚶 Keep going!"
@@ -33,7 +37,11 @@ def get_emoji(percent):
     else:
         return "🎉 Done!"
 
-# Style
+# App UI
+st.set_page_config(page_title="Challenge Tracker", layout="centered")
+st.title("🏁 Daily Challenge Tracker")
+
+# Animated CSS
 st.markdown("""
     <style>
     .animated-bar {
@@ -55,10 +63,9 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# UI
-st.title("🏁 Daily Challenge Tracker")
 data = load_data()
 
+# Setup Challenge
 if not data:
     st.subheader("🎯 Set Your Challenge")
     days = st.number_input("How many days is your challenge?", min_value=1, max_value=100, step=1)
@@ -66,22 +73,32 @@ if not data:
         save_data({
             "start_time": datetime.now().isoformat(),
             "challenge_days": days,
-            "status": "running"
+            "status": "running",
+            "last_milestone": 0
         })
         st.success("Challenge Started!")
         st.rerun()
+
 else:
     st.subheader("💥 Challenge in Progress")
+    
     start_time = datetime.fromisoformat(data["start_time"])
     challenge_days = data["challenge_days"]
     total_secs = challenge_days * 24 * 60 * 60
     elapsed_secs = (datetime.now() - start_time).total_seconds()
     percent = min((elapsed_secs / total_secs) * 100, 100)
+    milestone = int(percent // 5) * 5
 
     emoji_msg = get_emoji(percent)
     st.markdown(f"### {emoji_msg} ({percent:.2f}%)")
 
-    # Stylish progress bar
+    # 🔊 Background music toggle
+    st.markdown("---")
+    music_enabled = st.toggle("🎵 Play Background Music", value=True)
+    if music_enabled and os.path.exists(BACKGROUND_MUSIC_FILE):
+        st.audio(BACKGROUND_MUSIC_FILE, format="audio/mp3", loop=True)
+
+    # 🌈 Progress Bar
     bar_html = f"""
         <div class="container">
             <div style='width: {percent}%;' class='animated-bar'></div>
@@ -89,8 +106,18 @@ else:
     """
     st.markdown(bar_html, unsafe_allow_html=True)
 
+    # 🔔 Motivational Ding at each 5%
+    if milestone > data.get("last_milestone", 0) and milestone < 100:
+        if os.path.exists(DING_FILE):
+            st.audio(DING_FILE, format="audio/mp3", start_time=0)
+        data["last_milestone"] = milestone
+        save_data(data)
+
+    # 🎉 Victory
     if percent >= 100:
         st.balloons()
+        if os.path.exists(VICTORY_FILE):
+            st.audio(VICTORY_FILE, format="audio/mp3", start_time=0)
         st.success("🎉 Congratulations! You completed your challenge!")
         if st.button("🔁 Start New Challenge"):
             reset_challenge()
